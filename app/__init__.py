@@ -19,6 +19,8 @@ def create_app(config_overrides=None):
     if config_overrides:
         app.config.update(config_overrides)
 
+    from app import models
+
     db.init_app(app)
     migrate.init_app(app, db)
 
