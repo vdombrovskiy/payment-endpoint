@@ -24,3 +24,8 @@ class Settings(BaseSettings):
         validation_alias="FLASK_DEBUG",
     )
 
+    test_database_url: str | None = Field(
+        default=None,
+        validation_alias="TEST_DATABASE_URL",
+    )
+
