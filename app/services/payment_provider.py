@@ -4,6 +4,8 @@ from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict
 
+from threading import Lock
+
 
 class PaymentProviderResult(BaseModel):
     model_config = ConfigDict(
@@ -27,8 +29,11 @@ class PaymentProvider(Protocol):
     ) -> PaymentProviderResult:
         ...
 
-
 class MockPaymentProvider:
+    def __init__(self):
+        self._results: dict[uuid.UUID, PaymentProviderResult] = {}
+        self._lock = Lock()
+
     def charge(
         self,
         *,
@@ -37,13 +42,24 @@ class MockPaymentProvider:
         currency: str,
         idempotency_key: uuid.UUID,
     ) -> PaymentProviderResult:
-        if provider_token == "tok_test_declined":
-            return PaymentProviderResult(
-                success=False,
-                failure_reason="Payment declined by mock provider",
-            )
 
-        return PaymentProviderResult(
-            success=True,
-            transaction_id=f"mock_txn_{uuid.uuid4().hex}",
-        )
+        with self._lock:
+            existing_result = self._results.get(idempotency_key)
+
+            if existing_result is not None:
+                return existing_result
+
+            if provider_token == "tok_test_declined":
+                result = PaymentProviderResult(
+                    success=False,
+                    failure_reason="Payment declined by mock provider",
+                )
+            else:
+                result = PaymentProviderResult(
+                    success=True,
+                    transaction_id=f"mock_txn_{uuid.uuid4().hex}",
+                )
+
+            self._results[idempotency_key] = result
+
+            return result

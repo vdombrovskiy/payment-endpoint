@@ -58,3 +58,28 @@ def test_payment_provider_result_rejects_extra_fields():
             transaction_id="txn_123",
             unexpected_field="value",
         )
+
+def test_repeated_charge_with_same_idempotency_key_returns_same_result():
+    import uuid
+    from decimal import Decimal
+
+    provider = MockPaymentProvider()
+    idempotency_key = uuid.uuid4()
+
+    first_result = provider.charge(
+        provider_token="tok_test_alice_visa",
+        amount=Decimal("70.00"),
+        currency="USD",
+        idempotency_key=idempotency_key,
+    )
+
+    second_result = provider.charge(
+        provider_token="tok_test_alice_visa",
+        amount=Decimal("70.00"),
+        currency="USD",
+        idempotency_key=idempotency_key,
+    )
+
+    assert first_result == second_result
+    assert first_result.transaction_id == second_result.transaction_id
+

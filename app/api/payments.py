@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, current_app
 from pydantic import ValidationError
 
 from app.schemas.payment import PaymentCreate, PaymentResponse
@@ -15,13 +15,15 @@ from app.services.payment import (
 from app.services.cart_total import DatabaseCartTotalCalculator
 from app.services.payment_provider import MockPaymentProvider
 
+from app.services.payment import PaymentOutcomeUnknownError
+
 
 payments_bp = Blueprint("payments", __name__, url_prefix="/api/payments")
 
 
-def build_payment_service() -> PaymentService:
+def build_payment_service():
     return PaymentService(
-        provider=MockPaymentProvider(),
+        provider=current_app.extensions["payment_provider"],
         total_calculator=DatabaseCartTotalCalculator(),
     )
 
@@ -66,3 +68,7 @@ def create_payment():
         InvalidCartTotalError,
     ) as exc:
         return jsonify({"error": str(exc)}), 400
+    except PaymentOutcomeUnknownError as exc:
+        response = PaymentResponse.model_validate(exc.payment)
+
+        return jsonify(response.model_dump(mode="json")), 202

@@ -3,6 +3,8 @@ from flask import Flask
 from app.config import Settings
 from app.extensions import db, migrate
 
+from app.services.payment_provider import MockPaymentProvider
+
 
 def create_app(config_overrides=None):
     app = Flask(__name__)
@@ -23,6 +25,8 @@ def create_app(config_overrides=None):
 
     db.init_app(app)
     migrate.init_app(app, db)
+
+    app.extensions["payment_provider"] = MockPaymentProvider()
 
     from app.api.root import root_bp
     from app.api.payments import payments_bp
