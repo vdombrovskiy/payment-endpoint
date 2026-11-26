@@ -25,8 +25,10 @@ def create_app(config_overrides=None):
     migrate.init_app(app, db)
 
     from app.api.root import root_bp
+    from app.api.payments import payments_bp
 
     app.register_blueprint(root_bp)
+    app.register_blueprint(payments_bp)
 
     return app
 
