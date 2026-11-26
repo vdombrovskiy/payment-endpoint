@@ -7,6 +7,9 @@ from unittest.mock import patch
 
 from app.services.payment_provider import PaymentProviderResult
 
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event, Lock
+
 
 def make_payment_request(sample_checkout, idempotency_key):
     return {
@@ -191,3 +194,81 @@ def test_retry_pending_payment_with_same_key(
     )
 
     assert first_call.kwargs["amount"] == second_call.kwargs["amount"]
+
+
+def test_concurrent_requests_process_payment_only_once(
+    app,
+    sample_checkout,
+):
+    import uuid
+
+    payload = make_payment_request(
+        sample_checkout,
+        uuid.uuid4(),
+    )
+
+    first_provider_call_started = Event()
+    release_first_provider_call = Event()
+    second_provider_call_started = Event()
+
+    calls_lock = Lock()
+    provider_call_count = 0
+
+    def slow_provider_charge(self, **kwargs):
+        nonlocal provider_call_count
+
+        with calls_lock:
+            provider_call_count += 1
+            current_call = provider_call_count
+
+        if current_call == 1:
+            first_provider_call_started.set()
+            release_first_provider_call.wait(timeout=5)
+        else:
+            second_provider_call_started.set()
+
+        return PaymentProviderResult(
+            success=True,
+            transaction_id=f"mock_txn_concurrent_{current_call}",
+        )
+
+    def make_request():
+        with app.app_context():
+            with app.test_client() as thread_client:
+                return thread_client.post(
+                    "/api/payments",
+                    json=payload,
+                )
+
+    with patch(
+        "app.services.payment_provider.MockPaymentProvider.charge",
+        new=slow_provider_charge,
+    ):
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            first_request = executor.submit(make_request)
+
+            try:
+                assert first_provider_call_started.wait(timeout=5)
+
+                second_request = executor.submit(make_request)
+
+                assert not second_provider_call_started.wait(timeout=0.5)
+
+            finally:
+                release_first_provider_call.set()
+
+            first_response = first_request.result(timeout=10)
+            second_response = second_request.result(timeout=10)
+
+    assert first_response.status_code == 201
+    assert second_response.status_code == 201
+
+    first_data = first_response.get_json()
+    second_data = second_response.get_json()
+
+    assert first_data["id"] == second_data["id"]
+    assert first_data["status"] == "succeeded"
+    assert second_data["status"] == "succeeded"
+
+    assert provider_call_count == 1
+

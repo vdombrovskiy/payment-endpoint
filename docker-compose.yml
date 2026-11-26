@@ -1,7 +1,6 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: payment-endpoint-db
     environment:
       POSTGRES_DB: payment_endpoint
       POSTGRES_USER: app
@@ -15,6 +14,19 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  web:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      SECRET_KEY: dev-only-change-me
+      DATABASE_URL: postgresql+psycopg://app:app@db:5432/payment_endpoint
+      TEST_DATABASE_URL: postgresql+psycopg://app:app@db:5432/payment_endpoint_test
+      FLASK_DEBUG: "false"
+    depends_on:
+      db:
+        condition: service_healthy
 
 volumes:
   postgres_data:
