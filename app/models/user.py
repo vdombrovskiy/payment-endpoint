@@ -34,3 +34,4 @@ class User(db.Model):
     payment_methods: Mapped[list["UserPaymentMethod"]] = relationship(
         back_populates="user"
     )
+    payments: Mapped[list["Payment"]] = relationship(back_populates="user")

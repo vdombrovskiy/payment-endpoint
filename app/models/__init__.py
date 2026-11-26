@@ -3,6 +3,7 @@ from app.models.cart_item import CartItem
 from app.models.product import Product
 from app.models.user import User
 from app.models.user_payment_method import UserPaymentMethod
+from app.models.payment import Payment
 
 __all__ = [
     "Cart",
@@ -10,4 +11,5 @@ __all__ = [
     "Product",
     "User",
     "UserPaymentMethod",
+    "Payment",
 ]

@@ -59,3 +59,4 @@ class Cart(db.Model):
         back_populates="cart",
         cascade="all, delete-orphan",
     )
+    payments: Mapped[list["Payment"]] = relationship(back_populates="cart")
