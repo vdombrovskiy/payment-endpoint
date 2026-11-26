@@ -12,6 +12,7 @@ from app.services.payment_provider import PaymentProviderResult
 def scalar_result(value):
     result = MagicMock()
     result.scalar_one_or_none.return_value = value
+    result.scalar_one.return_value = value
     return result
 
 
@@ -42,13 +43,37 @@ def create_payment_service(
             scalar_result(existing_payment),
         ]
     else:
-        session.execute.side_effect = [
+        payment = SimpleNamespace(
+            id=uuid.uuid4(),
+            status="pending",
+            amount=Decimal("70.00"),
+            currency="USD",
+            provider_transaction_id=None,
+            failure_reason=None,
+            idempotency_key=idempotency_key,
+        )
+
+        results = iter([
             scalar_result(None),
             scalar_result(cart),
             scalar_result(None),
             scalar_result(None),
             scalar_result(payment_method),
-        ]
+        ])
+
+        def execute(statement):
+            try:
+                return next(results)
+            except StopIteration:
+                return scalar_result(session._added_payment)
+
+        session.execute.side_effect = execute
+
+        session.add.side_effect = lambda added_payment: setattr(
+            session,
+            "_added_payment",
+            added_payment,
+        )
 
     provider = MagicMock()
     provider.charge.return_value = provider_result

@@ -108,8 +108,6 @@ class PaymentService:
             cart_id=cart_id,
         )
 
-        # Check again after acquiring the cart lock.
-        # Another request might have created the payment in the meantime.
         existing_payment = self._get_payment_by_idempotency_key(
             user_id=user_id,
             idempotency_key=idempotency_key,
@@ -178,6 +176,16 @@ class PaymentService:
         cart: Cart,
         payment_method: UserPaymentMethod,
     ) -> Payment:
+        payment = self._session.execute(
+            select(Payment)
+            .where(Payment.id == payment.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).scalar_one()
+
+        if payment.status != "pending":
+            return payment
+
         try:
             result = self._provider.charge(
                 provider_token=payment_method.provider_token,
@@ -186,6 +194,11 @@ class PaymentService:
                 idempotency_key=payment.idempotency_key,
             )
         except Exception as exc:
+            payment_id = payment.id
+            self._session.rollback()
+
+            payment = self._session.get(Payment, payment_id)
+
             raise PaymentOutcomeUnknownError(payment) from exc
 
         if result.success:
@@ -222,11 +235,17 @@ class PaymentService:
         *,
         user_id: uuid.UUID,
         idempotency_key: uuid.UUID,
+        for_update: bool = False,
     ) -> Payment | None:
         statement = select(Payment).where(
             Payment.user_id == user_id,
             Payment.idempotency_key == idempotency_key,
         )
+
+        if for_update:
+            statement = statement.with_for_update()
+
+        statement = statement.execution_options(populate_existing=True)
 
         return self._session.execute(statement).scalar_one_or_none()
 
